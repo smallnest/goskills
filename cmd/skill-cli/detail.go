@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/smallnest/goskills"
@@ -9,71 +10,62 @@ import (
 )
 
 var detailCmd = &cobra.Command{
-	Use:   "detail [path]",
-	Short: "Displays detailed information about a skill.",
-	Long: `The detail command provides a comprehensive view of a skill package,
-including all metadata and the full, unabridged content of the SKILL.md body.`, 
-	Args: cobra.ExactArgs(1),
+	Use:   "detail <skill_directory>",
+	Short: "Displays detailed information about a skill package.",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		skillPath := args[0]
-		skillPackage, err := goskills.ParseSkillPackage(skillPath)
+		skillDir := args[0]
+		absSkillDir, err := filepath.Abs(skillDir)
 		if err != nil {
-			return fmt.Errorf("failed to parse skill: %w", err)
+			return fmt.Errorf("failed to get absolute path for %s: %w", skillDir, err)
 		}
 
-		// --- Print Meta ---
-		fmt.Printf("--- Skill: %s ---\n\n", skillPackage.Meta.Name)
-		fmt.Println("[Meta]")
-		fmt.Printf("  Description: %s\n", skillPackage.Meta.Description)
-		if skillPackage.Meta.Model != "" {
-			fmt.Printf("  Model: %s\n", skillPackage.Meta.Model)
+		skillPackage, err := goskills.ParseSkillPackage(absSkillDir)
+		if err != nil {
+			return fmt.Errorf("failed to parse skill package: %w", err)
 		}
-		if len(skillPackage.Meta.AllowedTools) > 0 {
-			fmt.Printf("  Allowed Tools: %v\n", skillPackage.Meta.AllowedTools)
+
+		fmt.Printf("--- Skill Details: %s ---\n", skillPackage.Meta.Name)
+		fmt.Printf("Path: %s\n", skillPackage.Path)
+		fmt.Printf("Description: %s\n", skillPackage.Meta.Description)
+		fmt.Printf("Allowed Tools: %s\n", strings.Join(skillPackage.Meta.AllowedTools, ", "))
+		if skillPackage.Meta.Model != "" {
+			fmt.Printf("Model: %s\n", skillPackage.Meta.Model)
 		}
 		if skillPackage.Meta.Author != "" {
-			fmt.Printf("  Author: %s\n", skillPackage.Meta.Author)
+			fmt.Printf("Author: %s\n", skillPackage.Meta.Author)
 		}
 		if skillPackage.Meta.Version != "" {
-			fmt.Printf("  Version: %s\n", skillPackage.Meta.Version)
+			fmt.Printf("Version: %s\n", skillPackage.Meta.Version)
 		}
-		fmt.Println()
+		if skillPackage.Meta.License != "" {
+			fmt.Printf("License: %s\n", skillPackage.Meta.License)
+		}
 
-		// --- Print Resources ---
-		fmt.Println("[Resources]")
+		fmt.Println("\n--- SKILL.md Body ---")
+		fmt.Println(skillPackage.Body) // Directly print the raw markdown body
+
+		fmt.Println("\n--- Resources ---")
+		if len(skillPackage.Resources.Scripts) > 0 {
+			fmt.Println("Scripts:")
+			for _, s := range skillPackage.Resources.Scripts {
+				fmt.Printf("  - %s\n", s)
+			}
+		}
+		if len(skillPackage.Resources.References) > 0 {
+			fmt.Println("References:")
+			for _, r := range skillPackage.Resources.References {
+				fmt.Printf("  - %s\n", r)
+			}
+		}
+		if len(skillPackage.Resources.Assets) > 0 {
+			fmt.Println("Assets:")
+			for _, a := range skillPackage.Resources.Assets {
+				fmt.Printf("  - %s\n", a)
+			}
+		}
 		if len(skillPackage.Resources.Scripts) == 0 && len(skillPackage.Resources.References) == 0 && len(skillPackage.Resources.Assets) == 0 {
-			fmt.Println("  No resource files found.")
-		} else {
-			if len(skillPackage.Resources.Scripts) > 0 {
-				fmt.Printf("  Scripts: %v\n", skillPackage.Resources.Scripts)
-			}
-			if len(skillPackage.Resources.References) > 0 {
-				fmt.Printf("  References: %v\n", skillPackage.Resources.References)
-			}
-			if len(skillPackage.Resources.Assets) > 0 {
-				fmt.Printf("  Assets: %v\n", skillPackage.Resources.Assets)
-			}
-		}
-		fmt.Println()
-
-		// --- Print Full Body ---
-		fmt.Println("[Full Body]")
-		for _, part := range skillPackage.Body {
-			switch p := part.(type) {
-			case goskills.TitlePart:
-				fmt.Printf("\n[Title]: %s\n", p.Text)
-			case goskills.SectionPart:
-				fmt.Printf("\n[Section]: %s\n", p.Title)
-				fmt.Println(strings.Repeat("-", len(p.Title)+12))
-				fmt.Println(p.Content)
-			case goskills.MarkdownPart:
-				fmt.Println(p.Content)
-			case goskills.ImplementationPart:
-				fmt.Printf("\n[Implementation]: %s\n", p.Language)
-				fmt.Println("```" + p.Language)
-				fmt.Print(p.Code)
-				fmt.Println("```")
-			}
+			fmt.Println("No resources found.")
 		}
 
 		return nil

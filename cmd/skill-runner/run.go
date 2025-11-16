@@ -234,12 +234,12 @@ func getToolDefinitions() []openai.Tool {
 				},
 			},
 		},
-		// New tools from langchaingo
+		// New tools implemented directly
 		{
 			Type: openai.ToolTypeFunction,
 			Function: &openai.FunctionDefinition{
 				Name:        "duckduckgo_search",
-				Description: "Performs a DuckDuckGo search for the given query and returns the top results.",
+				Description: "Performs a DuckDuckGo search for the given query and returns a summary or related topics.",
 				Parameters: map[string]interface{}{
 					"type": "object",
 					"properties": map[string]interface{}{
@@ -249,57 +249,6 @@ func getToolDefinitions() []openai.Tool {
 						},
 					},
 					"required": []string{"query"},
-				},
-			},
-		},
-		{
-			Type: openai.ToolTypeFunction,
-			Function: &openai.FunctionDefinition{
-				Name:        "serpapi_search",
-				Description: "Performs a search using SerpAPI for the given query and returns structured results. Requires SERPAPI_API_KEY.",
-				Parameters: map[string]interface{}{
-					"type": "object",
-					"properties": map[string]interface{}{
-						"query": map[string]interface{}{
-							"type":        "string",
-							"description": "The search query.",
-						},
-					},
-					"required": []string{"query"},
-				},
-			},
-		},
-		{
-			Type: openai.ToolTypeFunction,
-			Function: &openai.FunctionDefinition{
-				Name:        "metaphor_search",
-				Description: "Performs a search for content using Metaphor. Requires METAPHOR_API_KEY.",
-				Parameters: map[string]interface{}{
-					"type": "object",
-					"properties": map[string]interface{}{
-						"query": map[string]interface{}{
-							"type":        "string",
-							"description": "The search query.",
-						},
-					},
-					"required": []string{"query"},
-				},
-			},
-		},
-		{
-			Type: openai.ToolTypeFunction,
-			Function: &openai.FunctionDefinition{
-				Name:        "scrape_url",
-				Description: "Scrapes the content of a given URL and returns its text.",
-				Parameters: map[string]interface{}{
-					"type": "object",
-					"properties": map[string]interface{}{
-						"url": map[string]interface{}{
-							"type":        "string",
-							"description": "The URL to scrape.",
-						},
-					},
-					"required": []string{"url"},
 				},
 			},
 		},
@@ -307,7 +256,7 @@ func getToolDefinitions() []openai.Tool {
 			Type: openai.ToolTypeFunction,
 			Function: &openai.FunctionDefinition{
 				Name:        "wikipedia_search",
-				Description: "Performs a search on Wikipedia for the given query and returns a summary.",
+				Description: "Performs a search on Wikipedia for the given query and returns a summary of the relevant entry.",
 				Parameters: map[string]interface{}{
 					"type": "object",
 					"properties": map[string]interface{}{
@@ -397,21 +346,7 @@ func executeToolCall(toolCall openai.ToolCall) (string, error) {
 func executeSkillWithTools(ctx context.Context, client *openai.Client, userPrompt string, skill goskills.SkillPackage) error {
 	// Reconstruct the skill body from structured parts for the system prompt
 	var skillBody strings.Builder
-	for _, part := range skill.Body {
-		switch p := part.(type) {
-		case goskills.TitlePart:
-			skillBody.WriteString(fmt.Sprintf("\n# %s\n", p.Text))
-		case goskills.SectionPart:
-			skillBody.WriteString(fmt.Sprintf("\n## %s\n%s\n", p.Title, p.Content))
-		case goskills.MarkdownPart:
-			skillBody.WriteString(p.Content + "\n")
-		case goskills.ImplementationPart:
-			skillBody.WriteString(fmt.Sprintf("\nImplementation in %s:\n", p.Language))
-			skillBody.WriteString("```" + p.Language + "\n")
-			skillBody.WriteString(p.Code)
-			skillBody.WriteString("```\n")
-		}
-	}
+	skillBody.WriteString(skill.Body) // Directly use the raw markdown body
 
 	messages := []openai.ChatCompletionMessage{
 		{

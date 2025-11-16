@@ -1,56 +1,22 @@
 package goskills
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
-// SkillBodyPart is an interface for different parts of the skill's markdown body.
-type SkillBodyPart interface {
-	PartType() string
-}
-
-// TitlePart represents a [Title]: ... part.
-type TitlePart struct {
-	Text string
-}
-func (p TitlePart) PartType() string { return "Title" }
-
-// SectionPart represents a [Section]: title: ... part.
-type SectionPart struct {
-	Title   string
-	Content string
-}
-func (p SectionPart) PartType() string { return "Section" }
-
-// MarkdownPart represents a block of plain markdown text.
-type MarkdownPart struct {
-	Content string
-}
-func (p MarkdownPart) PartType() string { return "Markdown" }
-
-// ImplementationPart represents an implementation block.
-type ImplementationPart struct {
-	Language string
-	Code     string
-}
-func (p ImplementationPart) PartType() string { return "Implementation" }
-
-
 // SkillPackage represents a fully and finely parsed Claude Skill package
 type SkillPackage struct {
-	Path      string          `json:"path"`
-	Meta      SkillMeta       `json:"meta"`
-	Body      []SkillBodyPart `json:"body"` // Structured content of SKILL.md
-	Resources SkillResources  `json:"resources"`
+	Path      string         `json:"path"`
+	Meta      SkillMeta      `json:"meta"`
+	Body      string         `json:"body"` // Raw Markdown content of SKILL.md body
+	Resources SkillResources `json:"resources"`
 }
 
 // SkillMeta corresponds to the content of SKILL.md frontmatter
@@ -71,91 +37,7 @@ type SkillResources struct {
 	Assets     []string `json:"assets"`
 }
 
-var (
-	titleRegex = regexp.MustCompile(`^[Title]\s*:\s*(.*)`)
-	sectionRegex = regexp.MustCompile(`^[Section]\s*:\s*title:\s*"(.*)"`) // Corrected regex for section title
-	implRegex = regexp.MustCompile(`^This is the implementation in (.*)`)
-)
-
-// parseMarkdownBody parses the raw markdown string into structured parts.
-func parseMarkdownBody(body string) []SkillBodyPart {
-	var parts []SkillBodyPart
-	scanner := bufio.NewScanner(strings.NewReader(body))
-	
-	var currentContent strings.Builder
-	inCodeBlock := false
-
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		if strings.HasPrefix(line, "```") {
-			inCodeBlock = !inCodeBlock
-		}
-
-		if !inCodeBlock {
-			if match := titleRegex.FindStringSubmatch(line); len(match) > 1 {
-				if currentContent.Len() > 0 {
-					parts = append(parts, MarkdownPart{Content: strings.TrimSpace(currentContent.String())})
-					currentContent.Reset()
-				}
-				parts = append(parts, TitlePart{Text: match[1]})
-				continue
-			}
-			if match := sectionRegex.FindStringSubmatch(line); len(match) > 1 {
-				if currentContent.Len() > 0 {
-					parts = append(parts, MarkdownPart{Content: strings.TrimSpace(currentContent.String())})
-					currentContent.Reset()
-				}
-				parts = append(parts, SectionPart{Title: match[1]}) // Content will be the next markdown block
-				continue
-			}
-			if match := implRegex.FindStringSubmatch(line); len(match) > 1 {
-				if currentContent.Len() > 0 {
-					// The content before this line is the content of the previous section
-					if lastPart, ok := parts[len(parts)-1].(SectionPart); ok {
-						lastPart.Content = strings.TrimSpace(currentContent.String())
-						parts[len(parts)-1] = lastPart
-					} else {
-						parts = append(parts, MarkdownPart{Content: strings.TrimSpace(currentContent.String())})
-					}
-					currentContent.Reset()
-				}
-				// The code block follows this line
-				var codeContent strings.Builder
-				scanner.Scan() // Move to ``` line
-				for scanner.Scan() {
-					codeLine := scanner.Text()
-					if strings.HasPrefix(codeLine, "```") {
-						break
-					}
-					codeContent.WriteString(codeLine + "\n")
-				}
-				parts = append(parts, ImplementationPart{Language: match[1], Code: codeContent.String()})
-				continue
-			}
-		}
-		currentContent.WriteString(line + "\n")
-	}
-
-	if currentContent.Len() > 0 {
-		// Assign remaining content to the last section or as a general markdown part
-		if len(parts) > 0 {
-			if lastPart, ok := parts[len(parts)-1].(SectionPart); ok && lastPart.Content == "" {
-				lastPart.Content = strings.TrimSpace(currentContent.String())
-				parts[len(parts)-1] = lastPart
-			} else {
-				parts = append(parts, MarkdownPart{Content: strings.TrimSpace(currentContent.String())})
-			}
-		} else {
-			parts = append(parts, MarkdownPart{Content: strings.TrimSpace(currentContent.String())})
-		}
-	}
-
-	return parts
-}
-
-
-// extractAndParseSKILLmd separates and parses the frontmatter and body of SKILL.md
+// extractFrontmatterAndBody separates and parses the frontmatter and body of SKILL.md
 func extractFrontmatterAndBody(data []byte) (SkillMeta, string, error) {
 	marker := []byte("---")
 	var meta SkillMeta
@@ -233,8 +115,6 @@ func ParseSkillPackage(dirPath string) (*SkillPackage, error) {
 		return nil, err
 	}
 
-	bodyParts := parseMarkdownBody(bodyStr)
-
 	// 2. Find resource files
 	scripts, err := findResourceFiles(dirPath, "scripts")
 	if err != nil {
@@ -253,7 +133,7 @@ func ParseSkillPackage(dirPath string) (*SkillPackage, error) {
 	pkg := &SkillPackage{
 		Path: dirPath,
 		Meta: meta,
-		Body: bodyParts,
+		Body: bodyStr, // Store raw markdown body
 		Resources: SkillResources{
 			Scripts:    scripts,
 			References: references,
