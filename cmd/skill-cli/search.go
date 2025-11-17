@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/smallnest/goskills"
@@ -21,24 +19,14 @@ var searchCmd = &cobra.Command{
 		skillsRoot := args[0]
 		query := strings.ToLower(args[1])
 
-		entries, err := os.ReadDir(skillsRoot)
+		packages, err := goskills.ParseSkillPackages(skillsRoot)
 		if err != nil {
-			return fmt.Errorf("could not read skills directory '%s': %w", skillsRoot, err)
+			return fmt.Errorf("could not parse skills in directory '%s': %w", skillsRoot, err)
 		}
 
 		fmt.Printf("--- Searching for '%s' in %s ---\n", query, skillsRoot)
 		foundCount := 0
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-
-			skillPath := filepath.Join(skillsRoot, entry.Name())
-			skillPackage, err := goskills.ParseSkillPackage(skillPath)
-			if err != nil {
-				continue // Not a valid skill
-			}
-
+		for _, skillPackage := range packages {
 			// Case-insensitive search in name and description
 			name := strings.ToLower(skillPackage.Meta.Name)
 			description := strings.ToLower(skillPackage.Meta.Description)

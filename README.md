@@ -48,6 +48,36 @@ func main() {
 }
 ```
 
+### ParseSkillPackages
+
+To find and parse all valid skill packages within a directory and its subdirectories, you can use the `ParseSkillPackages` function. It recursively scans the given path, identifies all directories containing a `SKILL.md` file, and returns a slice of successfully parsed `*SkillPackage` objects.
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+
+	"github.com/smallnest/goskills"
+)
+
+func main() {
+	// Directory containing all your skills
+	skillsRootDirectory := "./examples/skills"
+
+	packages, err := goskills.ParseSkillPackages(skillsRootDirectory)
+	if err != nil {
+		log.Fatalf("Failed to parse skill packages: %v", err)
+	}
+
+	fmt.Printf("Found %d skill(s):\n", len(packages))
+	for _, pkg := range packages {
+		fmt.Printf("- Path: %s, Name: %s\n", pkg.Path, pkg.Meta.Name)
+	}
+}
+```
+
 ## Command-Line Interfaces
 
 This project provides two separate command-line tools:

@@ -142,4 +142,42 @@ func ParseSkillPackage(dirPath string) (*SkillPackage, error) {
 	}
 
 	return pkg, nil
+
+}
+
+// ParseSkillPackages finds all skill packages in a given directory and its subdirectories.
+// A directory is considered a skill package if it contains a SKILL.md file.
+// It returns a slice of successfully parsed SkillPackage objects.
+
+func ParseSkillPackages(rootDir string) ([]*SkillPackage, error) {
+	skillDirs := make(map[string]struct{})
+
+	walkErr := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !d.IsDir() && d.Name() == "SKILL.md" {
+			dir := filepath.Dir(path)
+			skillDirs[dir] = struct{}{}
+		}
+
+		return nil
+	})
+
+	if walkErr != nil {
+		return nil, fmt.Errorf("error walking directory %s: %w", rootDir, walkErr)
+	}
+
+	var packages []*SkillPackage
+	for dir := range skillDirs {
+		pkg, err := ParseSkillPackage(dir)
+		if err == nil {
+			packages = append(packages, pkg)
+		}
+
+		// Silently ignore packages that fail to parse
+	}
+
+	return packages, nil
 }

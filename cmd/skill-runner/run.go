@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	openai "github.com/sashabaranov/go-openai"
@@ -89,23 +88,18 @@ You can specify a custom model and API base URL using flags.`,
 }
 
 func discoverSkills(skillsRoot string) (map[string]goskills.SkillPackage, error) {
-	skills := make(map[string]goskills.SkillPackage)
-	entries, err := os.ReadDir(skillsRoot)
+	packages, err := goskills.ParseSkillPackages(skillsRoot)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
+	skills := make(map[string]goskills.SkillPackage, len(packages))
+	for _, pkg := range packages {
+		if pkg != nil {
+			skills[pkg.Meta.Name] = *pkg
 		}
-		skillPath := filepath.Join(skillsRoot, entry.Name())
-		skillPackage, err := goskills.ParseSkillPackage(skillPath)
-		if err != nil {
-			continue // Not a valid skill
-		}
-		skills[skillPackage.Meta.Name] = *skillPackage
 	}
+
 	return skills, nil
 }
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseSkillPackage(t *testing.T) {
@@ -210,5 +211,13 @@ allowed-tools: []
 	assert.NotNil(t, pkg)
 
 	assert.Len(t, pkg.Resources.Scripts, 1)
+
 	assert.Equal(t, filepath.Join("scripts", "subdir", "nested.sh"), pkg.Resources.Scripts[0])
+
+}
+
+func TestParseSkillPackages(t *testing.T) {
+	skills, err := ParseSkillPackages("./examples/skills")
+	require.NoError(t, err)
+	require.Len(t, skills, 16)
 }
