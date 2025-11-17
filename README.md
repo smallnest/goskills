@@ -2,6 +2,9 @@
 
 A Go package to parse Claude Skill packages from a directory structure. This parser is designed according to the specifications found in the [official Claude documentation](https://docs.claude.com/en/docs/agents-and-tools/agent-skills/).
 
+[![License](https://img.shields.io/:license-MIT-blue.svg)](https://opensource.org/licenses/MIT) [![GoDoc](https://godoc.org/github.com/smallnest/goskills?status.png)](http://godoc.org/github.com/smallnest/goskills)  [![github actions](https://github.com/smallnest/goskills/actions)](https://github.com/smallnest/goskills/actions/workflows/go.yml/badge.svg) [![Go Report Card](https://goreportcard.com/badge/github.com/smallnest/goskills)](https://goreportcard.com/report/github.com/smallnest/goskills) [![coveralls](https://coveralls.io/repos/smallnest/rpcx/badge.svg?branch=master&service=github)](https://coveralls.io/github/smallnest/rpcx?branch=master)
+
+
 ## Features
 
 - Parses `SKILL.md` for skill metadata and instructions.
