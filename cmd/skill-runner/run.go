@@ -50,6 +50,9 @@ You can specify a custom model and API base URL using flags.`,
 		if cfg.APIKey == "" {
 			return errors.New("OPENAI_API_KEY environment variable is not set")
 		}
+		if cfg.Model == "" {
+			cfg.Model = "gpt-4o"
+		}
 
 		openaiConfig := openai.DefaultConfig(cfg.APIKey)
 		if cfg.APIBase != "" {

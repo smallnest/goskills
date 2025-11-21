@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -57,6 +58,13 @@ func LoadConfig(cmd *cobra.Command) (*Config, error) {
 	if cfg.APIKey == "" {
 		cfg.APIKey = os.Getenv("OPENAI_API_KEY")
 	}
+	if cfg.APIBase == "" {
+		cfg.APIBase = os.Getenv("OPENAI_API_BASE")
+	}
+	if cfg.Model == "" {
+		cfg.Model = os.Getenv("OPENAI_MODEL")
+	}
+	cfg.APIBase = strings.TrimSuffix(cfg.APIBase, "/")
 
 	// Resolve SkillsDir to absolute path
 	if cfg.SkillsDir == "" {
@@ -74,7 +82,7 @@ func LoadConfig(cmd *cobra.Command) (*Config, error) {
 // SetupFlags registers the flags with the command
 func SetupFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("skills-dir", "d", "./examples/skills", "Path to the skills directory")
-	cmd.Flags().StringP("model", "m", "gpt-4o", "OpenAI-compatible model name")
+	cmd.Flags().StringP("model", "m", "", "OpenAI-compatible model name")
 	cmd.Flags().StringP("api-base", "b", "", "OpenAI-compatible API base URL")
 	cmd.Flags().Bool("auto-approve", false, "Auto-approve all tool calls (WARNING: potentially unsafe)")
 	cmd.Flags().StringSlice("allow-scripts", nil, "Comma-separated list of allowed script names (e.g. 'run_myscript_py')")

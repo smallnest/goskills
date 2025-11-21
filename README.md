@@ -150,7 +150,13 @@ Processes a user request by first discovering available skills, then asking an L
 export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 ./goskills-runner run "create an algorithm that generates abstract art"
 
-# Example with a custom OpenAI-compatible model and API base URL
+# Example with a custom OpenAI-compatible model and API base URL using environment variables
+export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
+export OPENAI_API_BASE="https://qianfan.baidubce.com/v2"
+export OPENAI_MODEL="deepseek-v3"
+./goskills-runner run "create an algorithm that generates abstract art"
+
+# Example with a custom OpenAI-compatible model and API base URL using command-line flags
 export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 ./goskills-runner run --model deepseek-v3 --api-base https://qianfan.baidubce.com/v2 "create an algorithm that generates abstract art"
 ```
