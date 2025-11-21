@@ -28,9 +28,17 @@ If the LLM decides to call a tool, the tool will be executed and its output fed 
 
 Requires the OPENAI_API_KEY environment variable to be set.
 You can specify a custom model and API base URL using flags.`,
-	Args: cobra.MinimumNArgs(1),
+	Args: cobra.MinimumNArgs(0),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		userPrompt := strings.Join(args, " ")
+		// -- COPY STDIN TO SUPPORT FILE --
+		if len(args) == 0 {
+			userPromptBytes, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				return fmt.Errorf("failed to read from stdin: %w", err)
+			}
+			userPrompt = strings.TrimSpace(string(userPromptBytes))
+		}
 
 		// --- LOAD CONFIG ---
 		cfg, err := config.LoadConfig(cmd)
