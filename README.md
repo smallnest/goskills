@@ -1,5 +1,8 @@
 # GoSkills - Claude Skills Management Tool
 
+[![Run in Smithery](https://smithery.ai/badge/skills/smallnest)](https://smithery.ai/skills?ns=smallnest&utm_source=github&utm_medium=badge)
+
+
 English | [简体中文](README_CN.md)
 
 A powerful command-line tool to parse, manage, and execute Claude Skill packages. GoSkills is designed according to the specifications found in the [official Claude documentation](https://docs.claude.com/en/docs/agents-and-tools/agent-skills/).
