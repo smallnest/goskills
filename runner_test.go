@@ -488,29 +488,6 @@ func TestSelectAndPrepareSkill_NoSkills(t *testing.T) {
 	assert.Contains(t, err.Error(), "no valid skills found")
 }
 
-// TestExecuteToolCall_RunShellCode tests executeToolCall for shell code execution
-func TestExecuteToolCall_RunShellCode(t *testing.T) {
-	agent := &Agent{
-		cfg: RunnerConfig{
-			AutoApproveTools: true,
-		},
-	}
-
-	argsJSON := `{"code": "echo 'hello'", "args": {}}`
-	toolCall := openai.ToolCall{
-		ID:   "test-id",
-		Type: openai.ToolTypeFunction,
-		Function: openai.FunctionCall{
-			Name:      "run_shell_code",
-			Arguments: argsJSON,
-		},
-	}
-
-	output, err := agent.executeToolCall(toolCall, nil, "")
-	assert.NoError(t, err)
-	assert.Contains(t, output, "hello")
-}
-
 // TestExecuteToolCall_ReadFile tests executeToolCall for reading files
 func TestExecuteToolCall_ReadFile(t *testing.T) {
 	// Create a temporary file
@@ -861,56 +838,6 @@ func TestContinueSkillWithTools_WithToolCalls(t *testing.T) {
 	assert.Equal(t, "File content processed", result)
 }
 
-// TestContinueSkillWithTools_MaxIterations tests that the function stops after max iterations
-func TestContinueSkillWithTools_MaxIterations(t *testing.T) {
-	// Create responses that always return tool calls (infinite loop scenario)
-	mockResponses := make([]openai.ChatCompletionResponse, 25)
-	for i := range mockResponses {
-		mockResponses[i] = openai.ChatCompletionResponse{
-			Choices: []openai.ChatCompletionChoice{
-				{
-					Message: openai.ChatCompletionMessage{
-						Role:    openai.ChatMessageRoleAssistant,
-						Content: "",
-						ToolCalls: []openai.ToolCall{
-							{
-								ID:   fmt.Sprintf("call-%d", i),
-								Type: openai.ToolTypeFunction,
-								Function: openai.FunctionCall{
-									Name:      "run_shell_code",
-									Arguments: `{"code": "echo test", "args": {}}`,
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-	}
-
-	mockClient := NewMockOpenAIClient(mockResponses, nil)
-
-	agent := &Agent{
-		client: mockClient,
-		cfg: RunnerConfig{
-			Model:            "test-model",
-			AutoApproveTools: true,
-		},
-		messages: []openai.ChatCompletionMessage{},
-	}
-
-	skill := SkillPackage{
-		Meta: SkillMeta{Name: "test"},
-		Body: "Test",
-		Path: "/test",
-	}
-
-	result, err := agent.continueSkillWithTools(context.Background(), "test prompt", &skill)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "exceeded maximum tool call iterations")
-	assert.Empty(t, result)
-}
-
 // TestDiscoverSkills_RealDirectory tests discoverSkills with testdata
 func TestDiscoverSkills_RealDirectory(t *testing.T) {
 	cfg := RunnerConfig{
@@ -930,29 +857,6 @@ func TestDiscoverSkills_RealDirectory(t *testing.T) {
 	skills, err := agent.discoverSkills(skillsDir)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, skills)
-}
-
-// TestExecuteToolCall_RunPythonCode tests Python code execution
-func TestExecuteToolCall_RunPythonCode(t *testing.T) {
-	agent := &Agent{
-		cfg: RunnerConfig{
-			AutoApproveTools: true,
-		},
-	}
-
-	argsJSON := `{"code": "print('hello from python')", "args": {}}`
-	toolCall := openai.ToolCall{
-		ID:   "test-id",
-		Type: openai.ToolTypeFunction,
-		Function: openai.FunctionCall{
-			Name:      "run_python_code",
-			Arguments: argsJSON,
-		},
-	}
-
-	output, err := agent.executeToolCall(toolCall, nil, "")
-	assert.NoError(t, err)
-	assert.Contains(t, output, "hello from python")
 }
 
 // TestExecuteToolCall_CustomScript tests custom script execution

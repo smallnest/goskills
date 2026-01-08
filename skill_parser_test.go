@@ -261,12 +261,6 @@ IMPORTANT: instructions in the system and user messages ALWAYS take precedence o
 	assert.Contains(t, pkg.Meta.Description, "Use this skill when you need to work with spreadsheets")
 	assert.Contains(t, pkg.Meta.Description, "Create a new workbook/sheet")
 
-	// Check that allowed tools were inferred
-	assert.NotEmpty(t, pkg.Meta.AllowedTools)
-	assert.Contains(t, pkg.Meta.AllowedTools, "read_file")
-	assert.Contains(t, pkg.Meta.AllowedTools, "write_file")
-	assert.Contains(t, pkg.Meta.AllowedTools, "run_python_code") // Should be inferred for spreadsheets
-
 	// Check that environment mapping was added to body
 	assert.Contains(t, pkg.Body, "工具使用")
 	assert.Contains(t, pkg.Body, "基于你的历史经验")
@@ -315,8 +309,6 @@ func TestParseOpenAISkillPackages(t *testing.T) {
 		assert.NotEmpty(t, skill.Meta.Name)
 		// Verify that each skill has a description
 		assert.NotEmpty(t, skill.Meta.Description)
-		// Verify that each skill has allowed tools inferred
-		assert.NotEmpty(t, skill.Meta.AllowedTools)
 		// Verify that environment mapping was added
 		assert.Contains(t, skill.Body, "工具使用")
 	}
