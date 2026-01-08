@@ -213,7 +213,6 @@ allowed-tools: []
 	assert.Len(t, pkg.Resources.Scripts, 1)
 
 	assert.Equal(t, filepath.Join("scripts", "subdir", "nested.sh"), pkg.Resources.Scripts[0])
-
 }
 
 func TestParseSkillPackages(t *testing.T) {
@@ -326,34 +325,4 @@ func TestParseOpenAISkillPackages(t *testing.T) {
 	assert.Contains(t, skillNames, "spreadsheets")
 	assert.Contains(t, skillNames, "docs")
 	assert.Contains(t, skillNames, "pdfs")
-}
-
-func TestInferAllowedTools(t *testing.T) {
-	// Test spreadsheet skill inference
-	tools := inferAllowedTools("this is a spreadsheet skill for working with xlsx and csv files", "spreadsheets")
-	assert.Contains(t, tools, "read_file")
-	assert.Contains(t, tools, "write_file")
-	assert.Contains(t, tools, "run_python_code")
-	assert.Contains(t, tools, "run_python_script")
-
-	// Test PDF skill inference
-	tools = inferAllowedTools("use pdftoppm to convert PDF files to images", "pdf")
-	assert.Contains(t, tools, "read_file")
-	assert.Contains(t, tools, "write_file")
-	assert.Contains(t, tools, "run_shell_code")
-	assert.Contains(t, tools, "run_python_script")
-
-	// Test document skill inference
-	tools = inferAllowedTools("create and edit DOCX documents using LibreOffice", "docs")
-	assert.Contains(t, tools, "read_file")
-	assert.Contains(t, tools, "write_file")
-	assert.Contains(t, tools, "run_shell_code")
-
-	// Test web search skill
-	tools = inferAllowedTools("fetch data from web APIs and search the internet", "web-fetcher")
-	assert.Contains(t, tools, "read_file")
-	assert.Contains(t, tools, "write_file")
-	assert.Contains(t, tools, "web_fetch")
-	assert.Contains(t, tools, "tavily_search")
-	assert.Contains(t, tools, "wikipedia_search")
 }

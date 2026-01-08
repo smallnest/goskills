@@ -10,27 +10,6 @@ func GetBaseTools() []openai.Tool {
 		{
 			Type: openai.ToolTypeFunction,
 			Function: &openai.FunctionDefinition{
-				Name:        "run_shell_code",
-				Description: "Executes a shell code snippet and returns its combined stdout and stderr.",
-				Parameters: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"code": map[string]any{
-							"type":        "string",
-							"description": "The shell code snippet to execute.",
-						},
-						"args": map[string]any{
-							"type":        "object",
-							"description": "A map of key-value pairs to pass to the code.",
-						},
-					},
-					"required": []string{"code"},
-				},
-			},
-		},
-		{
-			Type: openai.ToolTypeFunction,
-			Function: &openai.FunctionDefinition{
 				Name:        "run_shell_script",
 				Description: "Executes a shell script and returns its combined stdout and stderr. Use this for general shell commands.",
 				Parameters: map[string]any{
@@ -49,27 +28,6 @@ func GetBaseTools() []openai.Tool {
 						},
 					},
 					"required": []string{"scriptPath"},
-				},
-			},
-		},
-		{
-			Type: openai.ToolTypeFunction,
-			Function: &openai.FunctionDefinition{
-				Name:        "run_python_code",
-				Description: "Executes a Python code snippet and returns its combined stdout and stderr.",
-				Parameters: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"code": map[string]any{
-							"type":        "string",
-							"description": "The Python code snippet to execute.",
-						},
-						"args": map[string]any{
-							"type":        "object",
-							"description": "A map of key-value pairs to pass to the code.",
-						},
-					},
-					"required": []string{"code"},
 				},
 			},
 		},
@@ -138,23 +96,6 @@ func GetBaseTools() []openai.Tool {
 		{
 			Type: openai.ToolTypeFunction,
 			Function: &openai.FunctionDefinition{
-				Name:        "wikipedia_search",
-				Description: "Performs a search on Wikipedia for the given query and returns a summary of the relevant entry.",
-				Parameters: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"query": map[string]any{
-							"type":        "string",
-							"description": "The search query for Wikipedia.",
-						},
-					},
-					"required": []string{"query"},
-				},
-			},
-		},
-		{
-			Type: openai.ToolTypeFunction,
-			Function: &openai.FunctionDefinition{
 				Name:        "tavily_search",
 				Description: "Performs a web search using the Tavily API for the given query and returns a summary of results.",
 				Parameters: map[string]any{
@@ -169,22 +110,5 @@ func GetBaseTools() []openai.Tool {
 				},
 			},
 		},
-		// {
-		// 	Type: openai.ToolTypeFunction,
-		// 	Function: &openai.FunctionDefinition{
-		// 		Name:        "web_fetch",
-		// 		Description: "Fetches the clean text content from a given URL. It automatically parses the HTML and returns only the readable text.",
-		// 		Parameters: map[string]interface{}{
-		// 			"type": "object",
-		// 			"properties": map[string]interface{}{
-		// 				"url": map[string]interface{}{
-		// 					"type":        "string",
-		// 					"description": "The full URL to fetch, including the protocol (e.g., 'https://example.com').",
-		// 				},
-		// 			},
-		// 			"required": []string{"url"},
-		// 		},
-		// 	},
-		// },
 	}
 }

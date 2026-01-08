@@ -76,13 +76,10 @@ func TestGetBaseToolsSpecificTools(t *testing.T) {
 
 	// Test that expected tools exist
 	expectedTools := []string{
-		"run_shell_code",
 		"run_shell_script",
-		"run_python_code",
 		"run_python_script",
 		"read_file",
 		"write_file",
-		"wikipedia_search",
 		"tavily_search",
 	}
 
@@ -104,22 +101,10 @@ func TestToolDefinitionsStructure(t *testing.T) {
 		requiredParams []string
 	}{
 		{
-			name:           "run_shell_code",
-			expectedDesc:   "Executes a shell code snippet and returns its combined stdout and stderr.",
-			expectedParams: []string{"code", "args"},
-			requiredParams: []string{"code"},
-		},
-		{
 			name:           "run_shell_script",
 			expectedDesc:   "Executes a shell script and returns its combined stdout and stderr. Use this for general shell commands.",
 			expectedParams: []string{"scriptPath", "args"},
 			requiredParams: []string{"scriptPath"},
-		},
-		{
-			name:           "run_python_code",
-			expectedDesc:   "Executes a Python code snippet and returns its combined stdout and stderr.",
-			expectedParams: []string{"code", "args"},
-			requiredParams: []string{"code"},
 		},
 		{
 			name:           "run_python_script",
@@ -138,12 +123,6 @@ func TestToolDefinitionsStructure(t *testing.T) {
 			expectedDesc:   "Writes the given content to a file. If the file does not exist, it will be created. If it exists, its content will be truncated.",
 			expectedParams: []string{"filePath", "content"},
 			requiredParams: []string{"filePath", "content"},
-		},
-		{
-			name:           "wikipedia_search",
-			expectedDesc:   "Performs a search on Wikipedia for the given query and returns a summary of the relevant entry.",
-			expectedParams: []string{"query"},
-			requiredParams: []string{"query"},
 		},
 		{
 			name:           "tavily_search",

@@ -121,9 +121,6 @@ func parseOpenAISkill(skillDir string, data []byte) (SkillMeta, string, error) {
 		}
 	}
 
-	// Determine appropriate allowed tools based on skill content
-	meta.AllowedTools = inferAllowedTools(content, dirName)
-
 	// Prepend environment mapping information for OpenAI skills
 	envMapping := `## 工具使用
 你需要搜索相应的工具使用方法决定如何使用工具：
@@ -139,58 +136,6 @@ func parseOpenAISkill(skillDir string, data []byte) (SkillMeta, string, error) {
 	body = envMapping
 
 	return meta, body, nil
-}
-
-// inferAllowedTools analyzes skill content to determine what tools are likely needed
-func inferAllowedTools(content, skillName string) []string {
-	content = strings.ToLower(content)
-	var tools []string
-
-	// Always include basic file operations
-	tools = append(tools, "read_file", "write_file")
-
-	// Check for spreadsheet needs
-	if strings.Contains(skillName, "spreadsheet") || strings.Contains(content, "spreadsheet") ||
-		strings.Contains(content, "xlsx") || strings.Contains(content, "csv") {
-		tools = append(tools, "run_python_code")
-		tools = append(tools, "run_python_script")
-	}
-
-	// Check for PDF processing
-	if strings.Contains(skillName, "pdf") || strings.Contains(content, "pdf") {
-		tools = append(tools, "run_shell_code")
-		tools = append(tools, "run_python_script")
-	}
-
-	// Check for document processing
-	if strings.Contains(skillName, "docx") || strings.Contains(content, "docx") ||
-		strings.Contains(content, "document") {
-		tools = append(tools, "run_shell_code")
-	}
-
-	// Check for web/data fetching needs
-	if strings.Contains(content, "fetch") || strings.Contains(content, "search") ||
-		strings.Contains(content, "web") || strings.Contains(content, "api") {
-		tools = append(tools, "web_fetch", "tavily_search", "wikipedia_search")
-	}
-
-	// Check for shell/execution needs
-	if strings.Contains(content, "command") || strings.Contains(content, "execute") ||
-		strings.Contains(content, "install") || strings.Contains(content, "pip") {
-		tools = append(tools, "run_shell_code", "run_shell_script")
-	}
-
-	// Remove duplicates while preserving order
-	seen := make(map[string]bool)
-	var result []string
-	for _, tool := range tools {
-		if !seen[tool] {
-			seen[tool] = true
-			result = append(result, tool)
-		}
-	}
-
-	return result
 }
 
 // findResourceFiles finds all files in the specified resource directory
@@ -317,7 +262,6 @@ func ParseSkillPackage(dirPath string) (*SkillPackage, error) {
 	}
 
 	return pkg, nil
-
 }
 
 // ParseSkillPackages finds all skill packages in a given directory and its subdirectories.
@@ -374,6 +318,26 @@ func SkillsToPrompt(skills map[string]SkillPackage) string {
 	builder.WriteString("- Only use skills listed in <available_skills> below\n")
 	builder.WriteString("- Do not invoke a skill that is already running\n")
 	builder.WriteString("</skills_instructions>\n\n")
+
+	// Add available tools instructions
+	builder.WriteString("<available_tools_instructions>\n")
+	builder.WriteString("When working on tasks, you have access to the following tools:\n\n")
+	builder.WriteString("**File Operations:**\n")
+	builder.WriteString("- `write_file(filePath, content)`: Create or overwrite a file with the given content\n")
+	builder.WriteString("- `read_file(filePath)`: Read the contents of a file\n")
+	builder.WriteString("  Use these when you need to create, modify, or read files as part of your task.\n\n")
+
+	builder.WriteString("**Script Execution:**\n")
+	builder.WriteString("- `run_shell_script(scriptPath, args)`: Execute a shell script\n")
+	builder.WriteString("- `run_python_script(scriptPath, args)`: Execute a Python script\n")
+	builder.WriteString("  Use these when the task requires running scripts in the skill's scripts directory.\n\n")
+
+	builder.WriteString("**IMPORTANT Guidelines:**\n")
+	builder.WriteString("- When a skill asks you to \"create a file\" or \"write to a file\", you MUST call the `write_file` tool\n")
+	builder.WriteString("- When a skill asks you to \"read a file\", you MUST call the `read_file` tool\n")
+	builder.WriteString("- Do NOT just output file contents - actually call the tools to create/read files\n")
+	builder.WriteString("- Only execute scripts that are part of the skill's scripts directory\n")
+	builder.WriteString("</available_tools_instructions>\n\n")
 
 	// Add available skills section
 	builder.WriteString("<available_skills>\n")

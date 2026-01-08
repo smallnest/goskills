@@ -1,7 +1,6 @@
 package goskills
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/chzyer/readline"
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/smallnest/goskills/log"
 	"github.com/smallnest/goskills/mcp"
@@ -76,7 +76,7 @@ func (a *Agent) Run(ctx context.Context, userPrompt string) (string, error) {
 	// --- STEP 3: SKILL EXECUTION (with Tool Calling) ---
 	if a.cfg.Verbose >= 1 {
 		log.Info("executing skill (with potential tool calls)")
-		log.Info(strings.Repeat("-", 40))
+		log.Info(strings.Repeat("-", 10) + "Selected Skill:" + selectedSkill.Meta.Name + strings.Repeat("-", 10))
 	}
 
 	return a.executeSkillWithTools(ctx, userPrompt, selectedSkill)
@@ -89,11 +89,34 @@ func (a *Agent) RunLoop(ctx context.Context, initialPrompt string) error {
 		return err
 	}
 
-	reader := bufio.NewReader(os.Stdin)
+	// Initialize the system message before entering the loop
+	var skillBody strings.Builder
+	skillBody.WriteString("## SELECTED SKILL\n")
+	skillBody.WriteString(fmt.Sprintf("Name: %s\n", selectedSkill.Meta.Name))
+	skillBody.WriteString(fmt.Sprintf("Description: %s\n", selectedSkill.Meta.Description))
+	skillBody.WriteString(fmt.Sprintf("Version: %s\n\n", selectedSkill.Meta.Version))
+	skillBody.WriteString("## SKILL INSTRUCTIONS\n")
+	skillBody.WriteString(selectedSkill.Body)
+	skillBody.WriteString("\n\n##如果SKILL中没有要调用脚本的必要，则不要调用Tool,尤其是run_shell_script工具，直接根据SKILL的描述直接生成答案。\n\n ## SKILL CONTEXT\n")
+	skillBody.WriteString(fmt.Sprintf("Skill Root Path: %s\n", selectedSkill.Path))
+	a.messages = append(a.messages, openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleSystem,
+		Content: skillBody.String(),
+	})
+
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt:          "▶ ",
+		InterruptPrompt: "^C",
+		EOFPrompt:       "exit",
+	})
+	if err != nil {
+		return err
+	}
+	defer rl.Close()
+
 	currentPrompt := initialPrompt
 
 	for {
-		log.Info(strings.Repeat("-", 40))
 		finalOutput, err := a.continueSkillWithTools(ctx, currentPrompt, selectedSkill)
 		if err != nil {
 			log.Error("error during execution: %v", err)
@@ -102,20 +125,15 @@ func (a *Agent) RunLoop(ctx context.Context, initialPrompt string) error {
 			log.Info("%s", finalOutput)
 		}
 
-		fmt.Print("\nContinue in loop? (y/N) or enter new prompt: ")
-		answer, _ := reader.ReadString('\n')
-		answer = strings.TrimSpace(answer)
-
-		if strings.EqualFold(answer, "N") {
+		fmt.Print("\n")
+		currentPrompt, err = rl.Readline()
+		if err != nil {
 			break
 		}
+		currentPrompt = strings.TrimSpace(currentPrompt)
 
-		if strings.EqualFold(answer, "y") {
-			fmt.Print("Next prompt: ")
-			currentPrompt, _ = reader.ReadString('\n')
-			currentPrompt = strings.TrimSpace(currentPrompt)
-		} else {
-			currentPrompt = answer
+		if currentPrompt == "" || strings.EqualFold(currentPrompt, "q") || strings.EqualFold(currentPrompt, "quit") || strings.EqualFold(currentPrompt, "exit") {
+			break
 		}
 	}
 	return nil
@@ -284,20 +302,11 @@ func (a *Agent) debugPrintRequest(req openai.ChatCompletionRequest) {
 	fmt.Fprintln(os.Stderr, strings.Repeat("=", 60))
 	fmt.Fprintln(os.Stderr, "LLM Request:")
 	fmt.Fprintln(os.Stderr, strings.Repeat("=", 60))
-	fmt.Fprintf(os.Stderr, "Model: %s\n", req.Model)
-	fmt.Fprintf(os.Stderr, "Temperature: %v\n", req.Temperature)
-	fmt.Fprintln(os.Stderr, "Messages:")
-	for i, msg := range req.Messages {
-		fmt.Fprintf(os.Stderr, "  [%d] %s:\n", i, msg.Role)
-		// Truncate long messages for readability
-		content := msg.Content
-		if len(content) > 500 {
-			content = content[:500] + "... (truncated)"
-		}
-		fmt.Fprintf(os.Stderr, "      %s\n", content)
-	}
-	if len(req.Tools) > 0 {
-		fmt.Fprintf(os.Stderr, "Tools: %d\n", len(req.Tools))
+	jsonBytes, err := json.MarshalIndent(req, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error marshaling request to JSON: %v\n", err)
+	} else {
+		fmt.Fprintln(os.Stderr, string(jsonBytes))
 	}
 	fmt.Fprintln(os.Stderr, strings.Repeat("=", 60))
 }
@@ -310,19 +319,12 @@ func (a *Agent) debugPrintResponse(resp openai.ChatCompletionResponse) {
 	fmt.Fprintln(os.Stderr, strings.Repeat("=", 60))
 	fmt.Fprintln(os.Stderr, "LLM Response:")
 	fmt.Fprintln(os.Stderr, strings.Repeat("=", 60))
-	if len(resp.Choices) > 0 {
-		msg := resp.Choices[0].Message
-		fmt.Fprintf(os.Stderr, "Role: %s\n", msg.Role)
-		fmt.Fprintf(os.Stderr, "Content: %s\n", msg.Content)
-		if len(msg.ToolCalls) > 0 {
-			fmt.Fprintf(os.Stderr, "ToolCalls: %d\n", len(msg.ToolCalls))
-			for _, tc := range msg.ToolCalls {
-				fmt.Fprintf(os.Stderr, "  - %s: %s\n", tc.Function.Name, tc.Function.Arguments)
-			}
-		}
+	jsonBytes, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error marshaling response to JSON: %v\n", err)
+	} else {
+		fmt.Fprintln(os.Stderr, string(jsonBytes))
 	}
-	fmt.Fprintf(os.Stderr, "Usage: PromptTokens=%d, CompletionTokens=%d, TotalTokens=%d\n",
-		resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens)
 	fmt.Fprintln(os.Stderr, strings.Repeat("=", 60))
 }
 
@@ -330,6 +332,11 @@ func (a *Agent) debugPrintResponse(resp openai.ChatCompletionResponse) {
 func (a *Agent) executeSkillWithTools(ctx context.Context, userPrompt string, skill *SkillPackage) (string, error) {
 	// Prepare the system message once
 	var skillBody strings.Builder
+	skillBody.WriteString("## SELECTED SKILL\n")
+	skillBody.WriteString(fmt.Sprintf("Name: %s\n", skill.Meta.Name))
+	skillBody.WriteString(fmt.Sprintf("Description: %s\n", skill.Meta.Description))
+	skillBody.WriteString(fmt.Sprintf("Version: %s\n\n", skill.Meta.Version))
+	skillBody.WriteString("## SKILL INSTRUCTIONS\n")
 	skillBody.WriteString(skill.Body)
 	skillBody.WriteString("\n\n##如果SKILL中没有要调用脚本的必要，则不要调用Tool,尤其是run_shell_script工具，直接根据SKILL的描述直接生成答案。\n\n ## SKILL CONTEXT\n")
 	skillBody.WriteString(fmt.Sprintf("Skill Root Path: %s\n", skill.Path))
@@ -349,8 +356,6 @@ func (a *Agent) continueSkillWithTools(ctx context.Context, userPrompt string, s
 	})
 
 	availableTools, scriptMap := GenerateToolDefinitions(skill)
-
-	availableTools = append(availableTools, tool.GetBaseTools()...)
 
 	// Add MCP tools if client is available
 	if a.mcpClient != nil {
@@ -463,16 +468,6 @@ func (a *Agent) executeToolCall(toolCall openai.ToolCall, scriptMap map[string]s
 	var err error
 
 	switch toolCall.Function.Name {
-	case "run_shell_code":
-		var params struct {
-			Code string         `json:"code"`
-			Args map[string]any `json:"args"`
-		}
-		if err = json.Unmarshal([]byte(toolCall.Function.Arguments), &params); err != nil {
-			return "", fmt.Errorf("failed to unmarshal run_shell_code arguments: %w", err)
-		}
-		shellTool := tool.ShellTool{}
-		toolOutput, err = shellTool.Run(params.Args, params.Code)
 	case "run_shell_script":
 		var params struct {
 			ScriptPath string   `json:"scriptPath"`
@@ -482,16 +477,6 @@ func (a *Agent) executeToolCall(toolCall openai.ToolCall, scriptMap map[string]s
 			return "", fmt.Errorf("failed to unmarshal run_shell_script arguments: %w", err)
 		}
 		toolOutput, err = tool.RunShellScript(params.ScriptPath, params.Args)
-	case "run_python_code":
-		var params struct {
-			Code string         `json:"code"`
-			Args map[string]any `json:"args"`
-		}
-		if err = json.Unmarshal([]byte(toolCall.Function.Arguments), &params); err != nil {
-			return "", fmt.Errorf("failed to unmarshal run_python_code arguments: %w", err)
-		}
-		pythonTool := tool.PythonTool{}
-		toolOutput, err = pythonTool.Run(params.Args, params.Code)
 	case "run_python_script":
 		var params struct {
 			ScriptPath string   `json:"scriptPath"`
@@ -528,14 +513,6 @@ func (a *Agent) executeToolCall(toolCall openai.ToolCall, scriptMap map[string]s
 		if err == nil {
 			toolOutput = fmt.Sprintf("Successfully wrote to file: %s", params.FilePath)
 		}
-	case "wikipedia_search":
-		var params struct {
-			Query string `json:"query"`
-		}
-		if err = json.Unmarshal([]byte(toolCall.Function.Arguments), &params); err != nil {
-			return "", fmt.Errorf("failed to unmarshal wikipedia_search arguments: %w", err)
-		}
-		toolOutput, err = tool.WikipediaSearch(params.Query)
 	case "tavily_search":
 		var params struct {
 			Query string `json:"query"`
@@ -544,14 +521,6 @@ func (a *Agent) executeToolCall(toolCall openai.ToolCall, scriptMap map[string]s
 			return "", fmt.Errorf("failed to unmarshal tavily_search arguments: %w", err)
 		}
 		toolOutput, err = tool.TavilySearch(params.Query)
-	case "web_fetch":
-		var params struct {
-			URL string `json:"url"`
-		}
-		if err = json.Unmarshal([]byte(toolCall.Function.Arguments), &params); err != nil {
-			return "", fmt.Errorf("failed to unmarshal web_fetch arguments: %w", err)
-		}
-		toolOutput, err = tool.WebFetch(params.URL)
 	default:
 		if scriptPath, ok := scriptMap[toolCall.Function.Name]; ok {
 			var params struct {
