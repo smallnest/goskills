@@ -425,9 +425,15 @@ func (a *Agent) continueSkillWithTools(ctx context.Context, userPrompt string, s
 
 			// Check if it is an MCP tool
 			if a.mcpClient != nil && strings.Contains(tc.Function.Name, "__") {
+				// Clean arguments for MCP tools too
+				cleanedArgs := cleanToolArguments(tc.Function.Arguments)
+				if cleanedArgs != tc.Function.Arguments {
+					log.Debug("cleaned MCP tool arguments for %s: had fences/whitespace", tc.Function.Name)
+				}
+
 				var args map[string]any
-				if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
-					toolOutput = fmt.Sprintf("Error unmarshalling arguments: %v", err)
+				if err := json.Unmarshal([]byte(cleanedArgs), &args); err != nil {
+					toolOutput = fmt.Sprintf("Error unmarshalling arguments: %v (cleaned args: %s)", err, cleanedArgs)
 				} else {
 					var result any
 					result, err = a.mcpClient.CallTool(ctx, tc.Function.Name, args)
@@ -463,9 +469,66 @@ func (a *Agent) continueSkillWithTools(ctx context.Context, userPrompt string, s
 	return "", errors.New("exceeded maximum tool call iterations")
 }
 
+// cleanToolArguments cleans the tool arguments by removing code fences, fixing escape sequences,
+// and trimming whitespace. This handles cases where LLM returns malformed JSON arguments.
+func cleanToolArguments(args string) string {
+	// Trim leading and trailing whitespace
+	args = strings.TrimSpace(args)
+
+	// Remove code fence patterns: ```json, ```, ``` etc.
+	// This handles cases like:
+	// ```json
+	// {"key": "value"}
+	// ```
+	fencePatterns := []string{
+		"```json", "```JSON",
+		"```", // Must be after specific variants
+	}
+
+	for _, fence := range fencePatterns {
+		// Remove fence from start
+		if strings.HasPrefix(args, fence) {
+			args = strings.TrimPrefix(args, fence)
+			args = strings.TrimLeft(args, "\n\r\t ")
+		}
+		// Remove fence from end
+		if strings.HasSuffix(args, fence) {
+			args = strings.TrimSuffix(args, fence)
+			args = strings.TrimRight(args, "\n\r\t ")
+		}
+	}
+
+	// Handle JSON wrapped in single quotes: '{"key": "value"}' -> {"key": "value"}
+	// But only if the entire string is wrapped (starts and ends with single quote)
+	if len(args) >= 2 && strings.HasPrefix(args, "'") && strings.HasSuffix(args, "'") {
+		args = args[1 : len(args)-1]
+	}
+
+	// Fix over-escaped quotes in the JSON structure.
+	// Some LLMs return: {\"key\": \"value\"} instead of {"key": "value"}
+	// We detect this by checking if the string starts with {\" instead of {"
+	// This indicates the quotes in the JSON structure are escaped.
+	if strings.HasPrefix(args, `{\"`) || strings.HasPrefix(args, `[\"`) {
+		// Replace \" with " throughout
+		args = strings.ReplaceAll(args, `\"`, `"`)
+	}
+
+	// Fix escaped single quotes: \' -> ' (sometimes LLMs escape single quotes unnecessarily)
+	args = strings.ReplaceAll(args, `\'`, `'`)
+
+	// Final trim to ensure clean output
+	return strings.TrimSpace(args)
+}
+
 func (a *Agent) executeToolCall(toolCall openai.ToolCall, scriptMap map[string]string, skillPath string) (string, error) {
 	var toolOutput string
 	var err error
+
+	// Clean the arguments before parsing
+	cleanedArgs := cleanToolArguments(toolCall.Function.Arguments)
+	if cleanedArgs != toolCall.Function.Arguments {
+		log.Debug("cleaned tool arguments for %s: had fences/whitespace", toolCall.Function.Name)
+	}
 
 	switch toolCall.Function.Name {
 	case "run_shell_script":
@@ -473,8 +536,8 @@ func (a *Agent) executeToolCall(toolCall openai.ToolCall, scriptMap map[string]s
 			ScriptPath string   `json:"scriptPath"`
 			Args       []string `json:"args"`
 		}
-		if err = json.Unmarshal([]byte(toolCall.Function.Arguments), &params); err != nil {
-			return "", fmt.Errorf("failed to unmarshal run_shell_script arguments: %w", err)
+		if err = json.Unmarshal([]byte(cleanedArgs), &params); err != nil {
+			return "", fmt.Errorf("failed to unmarshal run_shell_script arguments: %w (cleaned args: %s)", err, cleanedArgs)
 		}
 		toolOutput, err = tool.RunShellScript(params.ScriptPath, params.Args)
 	case "run_python_script":
@@ -482,16 +545,16 @@ func (a *Agent) executeToolCall(toolCall openai.ToolCall, scriptMap map[string]s
 			ScriptPath string   `json:"scriptPath"`
 			Args       []string `json:"args"`
 		}
-		if err = json.Unmarshal([]byte(toolCall.Function.Arguments), &params); err != nil {
-			return "", fmt.Errorf("failed to unmarshal run_python_script arguments: %w", err)
+		if err = json.Unmarshal([]byte(cleanedArgs), &params); err != nil {
+			return "", fmt.Errorf("failed to unmarshal run_python_script arguments: %w (cleaned args: %s)", err, cleanedArgs)
 		}
 		toolOutput, err = tool.RunPythonScript(params.ScriptPath, params.Args)
 	case "read_file":
 		var params struct {
 			FilePath string `json:"filePath"`
 		}
-		if err = json.Unmarshal([]byte(toolCall.Function.Arguments), &params); err != nil {
-			return "", fmt.Errorf("failed to unmarshal read_file arguments: %w", err)
+		if err = json.Unmarshal([]byte(cleanedArgs), &params); err != nil {
+			return "", fmt.Errorf("failed to unmarshal read_file arguments: %w (cleaned args: %s)", err, cleanedArgs)
 		}
 		path := params.FilePath
 		if !filepath.IsAbs(path) && skillPath != "" {
@@ -506,8 +569,8 @@ func (a *Agent) executeToolCall(toolCall openai.ToolCall, scriptMap map[string]s
 			FilePath string `json:"filePath"`
 			Content  string `json:"content"`
 		}
-		if err = json.Unmarshal([]byte(toolCall.Function.Arguments), &params); err != nil {
-			return "", fmt.Errorf("failed to unmarshal write_file arguments: %w", err)
+		if err = json.Unmarshal([]byte(cleanedArgs), &params); err != nil {
+			return "", fmt.Errorf("failed to unmarshal write_file arguments: %w (cleaned args: %s)", err, cleanedArgs)
 		}
 		err = tool.WriteFile(params.FilePath, params.Content)
 		if err == nil {
@@ -517,8 +580,8 @@ func (a *Agent) executeToolCall(toolCall openai.ToolCall, scriptMap map[string]s
 		var params struct {
 			Query string `json:"query"`
 		}
-		if err = json.Unmarshal([]byte(toolCall.Function.Arguments), &params); err != nil {
-			return "", fmt.Errorf("failed to unmarshal tavily_search arguments: %w", err)
+		if err = json.Unmarshal([]byte(cleanedArgs), &params); err != nil {
+			return "", fmt.Errorf("failed to unmarshal tavily_search arguments: %w (cleaned args: %s)", err, cleanedArgs)
 		}
 		toolOutput, err = tool.TavilySearch(params.Query)
 	default:
@@ -526,9 +589,9 @@ func (a *Agent) executeToolCall(toolCall openai.ToolCall, scriptMap map[string]s
 			var params struct {
 				Args []string `json:"args"`
 			}
-			if toolCall.Function.Arguments != "" {
-				if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &params); err != nil {
-					return "", fmt.Errorf("failed to unmarshal script arguments: %w", err)
+			if cleanedArgs != "" {
+				if err := json.Unmarshal([]byte(cleanedArgs), &params); err != nil {
+					return "", fmt.Errorf("failed to unmarshal script arguments: %w (cleaned args: %s)", err, cleanedArgs)
 				}
 			}
 			if strings.HasSuffix(scriptPath, ".py") {
@@ -546,6 +609,7 @@ func (a *Agent) executeToolCall(toolCall openai.ToolCall, scriptMap map[string]s
 		if toolCall.Function.Arguments != "" {
 			log.Debug("raw arguments: %s", toolCall.Function.Arguments)
 		}
+		log.Debug("cleaned arguments: %s", cleanedArgs)
 		return "", fmt.Errorf("tool execution failed for %s: %w", toolCall.Function.Name, err)
 	}
 	return toolOutput, nil

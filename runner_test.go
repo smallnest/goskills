@@ -617,6 +617,146 @@ func TestExecuteToolCall_InvalidJSON(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to unmarshal")
 }
 
+// TestCleanToolArguments tests the cleanToolArguments function
+func TestCleanToolArguments(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "clean JSON",
+			input:    `{"key": "value"}`,
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "JSON with whitespace",
+			input:    `  {"key": "value"}  `,
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "JSON with code fence",
+			input:    "```json\n{\"key\": \"value\"}\n```",
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "JSON with uppercase code fence",
+			input:    "```JSON\n{\"key\": \"value\"}\n```",
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "JSON with simple code fence",
+			input:    "```\n{\"key\": \"value\"}\n```",
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "JSON wrapped in single quotes",
+			input:    `'{"key": "value"}'`,
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "JSON with over-escaped quotes",
+			input:    `{\"key\": \"value\"}`,
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "JSON with escaped single quotes",
+			input:    `{'key': 'value'}`,
+			expected: `{'key': 'value'}`,
+		},
+		{
+			name:     "JSON with newlines in code fence",
+			input:    "```json\r\n{\"key\": \"value\"}\r\n```",
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "complex case: code fence + over-escaped",
+			input:    "```json\n{\"filePath\": \"/tmp/test.txt\", \"content\": \"hello world\"}\n```",
+			expected: `{"filePath": "/tmp/test.txt", "content": "hello world"}`,
+		},
+		{
+			name:     "path with backslashes should keep double backslash",
+			input:    `{"path": "C:\\Users\\test"}`,
+			expected: `{"path": "C:\\Users\\test"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := cleanToolArguments(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestExecuteToolCall_WithCodeFence tests that tool calls work even with code fences
+func TestExecuteToolCall_WithCodeFence(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "output.txt")
+
+	agent := &Agent{
+		cfg: RunnerConfig{
+			AutoApproveTools: true,
+		},
+	}
+
+	testContent := "test content"
+	// Simulate LLM returning JSON with code fence
+	argsJSON := fmt.Sprintf("```json\n{\"filePath\": \"%s\", \"content\": \"%s\"}\n```", tmpFile, testContent)
+
+	toolCall := openai.ToolCall{
+		ID:   "test-id",
+		Type: openai.ToolTypeFunction,
+		Function: openai.FunctionCall{
+			Name:      "write_file",
+			Arguments: argsJSON,
+		},
+	}
+
+	output, err := agent.executeToolCall(toolCall, nil, "")
+	assert.NoError(t, err)
+	assert.Contains(t, output, "Successfully wrote to file")
+
+	// Verify file was created
+	content, err := os.ReadFile(tmpFile)
+	assert.NoError(t, err)
+	assert.Equal(t, testContent, string(content))
+}
+
+// TestExecuteToolCall_WithOverEscapedQuotes tests handling of over-escaped quotes
+func TestExecuteToolCall_WithOverEscapedQuotes(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "output.txt")
+
+	agent := &Agent{
+		cfg: RunnerConfig{
+			AutoApproveTools: true,
+		},
+	}
+
+	testContent := "test content"
+	// Simulate LLM returning over-escaped JSON
+	argsJSON := fmt.Sprintf(`{\"filePath\": \"%s\", \"content\": \"%s\"}`, tmpFile, testContent)
+
+	toolCall := openai.ToolCall{
+		ID:   "test-id",
+		Type: openai.ToolTypeFunction,
+		Function: openai.FunctionCall{
+			Name:      "write_file",
+			Arguments: argsJSON,
+		},
+	}
+
+	output, err := agent.executeToolCall(toolCall, nil, "")
+	assert.NoError(t, err)
+	assert.Contains(t, output, "Successfully wrote to file")
+
+	// Verify file was created
+	content, err := os.ReadFile(tmpFile)
+	assert.NoError(t, err)
+	assert.Equal(t, testContent, string(content))
+}
+
 // TestExecuteSkillWithTools tests executeSkillWithTools method
 func TestExecuteSkillWithTools(t *testing.T) {
 	// Create mock response without tool calls (final response)
