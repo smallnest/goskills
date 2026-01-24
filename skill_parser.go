@@ -20,15 +20,31 @@ type SkillPackage struct {
 	Resources SkillResources `json:"resources"`
 }
 
+// ToolParameter 定义工具参数
+type ToolParameter struct {
+	Type        string `yaml:"type"`
+	Description string `yaml:"description,omitempty"`
+	Required    bool   `yaml:"required,omitempty"`
+}
+
+// ToolDefinition 定义单个工具的配置
+type ToolDefinition struct {
+	Name        string                    `yaml:"name"`
+	Script      string                    `yaml:"script,omitempty"` // 可选，指定脚本路径
+	Description string                    `yaml:"description,omitempty"`
+	Parameters  map[string]ToolParameter  `yaml:"parameters,omitempty"`
+}
+
 // SkillMeta corresponds to the content of SKILL.md frontmatter
 type SkillMeta struct {
-	Name         string   `yaml:"name"`
-	Description  string   `yaml:"description"`
-	AllowedTools []string `yaml:"allowed-tools"`
-	Model        string   `yaml:"model,omitempty"`
-	Author       string   `yaml:"author,omitempty"`
-	Version      string   `yaml:"version,omitempty"`
-	License      string   `yaml:"license,omitempty"`
+	Name         string            `yaml:"name"`
+	Description  string            `yaml:"description"`
+	AllowedTools []string          `yaml:"allowed-tools"`
+	Model        string            `yaml:"model,omitempty"`
+	Author       string            `yaml:"author,omitempty"`
+	Version      string            `yaml:"version,omitempty"`
+	License      string            `yaml:"license,omitempty"`
+	Tools        []ToolDefinition  `yaml:"tools,omitempty"` // 工具定义列表
 }
 
 // SkillResources lists the relevant resource files in the skill package
