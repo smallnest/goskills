@@ -22,10 +22,10 @@ When a tool execution fails, the system:
 When a tool fails, the LLM receives a message like:
 
 ```
-Tool execution failed: read_file
-Error details: file not found: /path/to/nonexistent/file.txt
-Tool name: read_file
-Arguments: {"path": "/path/to/nonexistent/file.txt"}
+Tool execution failed: bash
+Error details: command failed: cat: /path/to/nonexistent/file.txt: No such file or directory
+Tool name: bash
+Arguments: {"command": "cat /path/to/nonexistent/file.txt"}
 
 You can try:
 1. Retry with different parameters
@@ -41,17 +41,17 @@ The LLM can intelligently respond to errors by:
 ```
 LLM: The file path was incorrect. Let me try a different path:
 {
-  "tool": "read_file",
-  "arguments": {"path": "./existing-file.txt"}
+  "tool": "bash",
+  "arguments": {"command": "cat ./existing-file.txt"}
 }
 ```
 
-### 2. **Alternative Tools**
+### 2. **Alternative Commands**
 ```
 LLM: Reading the file failed. Let me try searching for it:
 {
-  "tool": "run_shell_code",
-  "arguments": {"code": "find . -name '*.txt' | head -10"}
+  "tool": "bash",
+  "arguments": {"command": "find . -name '*.txt' | head -10"}
 }
 ```
 
@@ -59,8 +59,8 @@ LLM: Reading the file failed. Let me try searching for it:
 ```
 LLM: The file doesn't exist. Let me create it instead:
 {
-  "tool": "write_file",
-  "arguments": {"path": "/path/to/file.txt", "content": "new content"}
+  "tool": "bash",
+  "arguments": {"command": "echo 'new content' > /path/to/file.txt"}
 }
 ```
 
@@ -88,17 +88,17 @@ LLM: The file doesn't exist. Let me create it instead:
 
 ## Implementation Details
 
-The error handling is implemented in `runner.go` lines 349-358:
+The error handling is implemented in `runner.go`:
 
 ```go
 if err != nil {
-    log.Error("tool call failed: %v", err)
+    log.Error("tool execution failed for %s: %v", toolCall.Function.Name, err)
     // Provide detailed error information to help LLM understand what went wrong
-    errorMsg := fmt.Sprintf("Tool execution failed: %s\nError details: %v\nTool name: %s\nArguments: %s\n\nYou can try:\n1. Retry with different parameters\n2. Use a different tool\n3. Modify your approach",
-        tc.Function.Name, err, tc.Function.Name, tc.Function.Arguments)
+    errorMsg := fmt.Sprintf("Tool execution failed: %s\nError details: %v\nTool name: %s\nArguments: %s\n\nYou can try:\n1. Retry with different parameters\n2. Use a different tool to fix it\n3. Modify your approach",
+        toolCall.Function.Name, err, toolCall.Function.Name, toolCall.Function.Arguments)
     a.messages = append(a.messages, openai.ChatCompletionMessage{
         Role:       openai.ChatMessageRoleTool,
-        ToolCallID: tc.ID,
+        ToolCallID: toolCall.ID,
         Content:    errorMsg,
     })
 }
@@ -111,29 +111,29 @@ if err != nil {
 **LLM**: I'll read the config file to get the API key.
 ```json
 {
-  "tool": "read_file",
-  "arguments": {"path": "/etc/config.json"}
+  "tool": "bash",
+  "arguments": {"command": "cat /etc/config.json"}
 }
 ```
 
 **System**: Tool fails with error
 ```
-Tool execution failed: read_file
-Error details: permission denied: open /etc/config.json
-Tool name: read_file
-Arguments: {"path": "/etc/config.json"}
+Tool execution failed: bash
+Error details: command failed: cat: /etc/config.json: Permission denied
+Tool name: bash
+Arguments: {"command": "cat /etc/config.json"}
 
 You can try:
 1. Retry with different parameters
-2. Use a different tool
+2. Use a different tool to fix it
 3. Modify your approach
 ```
 
 **LLM**: I don't have permission to read that file. Let me try a different approach and check for user config files:
 ```json
 {
-  "tool": "read_file",
-  "arguments": {"path": "./config.json"}
+  "tool": "bash",
+  "arguments": {"command": "cat ./config.json"}
 }
 ```
 

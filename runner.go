@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/chzyer/readline"
@@ -97,7 +96,12 @@ func (a *Agent) RunLoop(ctx context.Context, initialPrompt string) error {
 	skillBody.WriteString(fmt.Sprintf("Version: %s\n\n", selectedSkill.Meta.Version))
 	skillBody.WriteString("## SKILL INSTRUCTIONS\n")
 	skillBody.WriteString(selectedSkill.Body)
-	skillBody.WriteString("\n\n##如果SKILL中没有要调用脚本的必要，则不要调用Tool,尤其是run_shell_script工具，直接根据SKILL的描述直接生成答案。\n\n ## SKILL CONTEXT\n")
+	skillBody.WriteString("\n\n## Tool Usage Guidelines\n")
+	skillBody.WriteString("- Only use the `bash` tool when explicitly necessary for file operations or script execution\n")
+	skillBody.WriteString("- Use `tavily_search` when you need to search the web for current information\n")
+	skillBody.WriteString("- Many tasks can be completed by directly generating responses without tool calls\n")
+	skillBody.WriteString("- If the SKILL doesn't require script execution, prefer direct answer generation\n\n")
+	skillBody.WriteString("## SKILL CONTEXT\n")
 	skillBody.WriteString(fmt.Sprintf("Skill Root Path: %s\n", selectedSkill.Path))
 	a.messages = append(a.messages, openai.ChatCompletionMessage{
 		Role:    openai.ChatMessageRoleSystem,
@@ -338,7 +342,7 @@ func (a *Agent) executeSkillWithTools(ctx context.Context, userPrompt string, sk
 	skillBody.WriteString(fmt.Sprintf("Version: %s\n\n", skill.Meta.Version))
 	skillBody.WriteString("## SKILL INSTRUCTIONS\n")
 	skillBody.WriteString(skill.Body)
-	skillBody.WriteString("\n\n##如果SKILL中没有要调用脚本的必要，则不要调用Tool,尤其是run_shell_script工具，直接根据SKILL的描述直接生成答案。\n\n ## SKILL CONTEXT\n")
+	skillBody.WriteString("\n\n ## SKILL CONTEXT\n")
 	skillBody.WriteString(fmt.Sprintf("Skill Root Path: %s\n", skill.Path))
 	a.messages = append(a.messages, openai.ChatCompletionMessage{
 		Role:    openai.ChatMessageRoleSystem,
@@ -531,51 +535,22 @@ func (a *Agent) executeToolCall(toolCall openai.ToolCall, scriptMap map[string]s
 	}
 
 	switch toolCall.Function.Name {
-	case "run_shell_script":
+	case "bash":
 		var params struct {
-			ScriptPath string   `json:"scriptPath"`
-			Args       []string `json:"args"`
+			Command string `json:"command"`
 		}
 		if err = json.Unmarshal([]byte(cleanedArgs), &params); err != nil {
-			return "", fmt.Errorf("failed to unmarshal run_shell_script arguments: %w (cleaned args: %s)", err, cleanedArgs)
+			return "", fmt.Errorf("failed to unmarshal bash arguments: %w (cleaned args: %s)", err, cleanedArgs)
 		}
-		toolOutput, err = tool.RunShellScript(params.ScriptPath, params.Args)
-	case "run_python_script":
-		var params struct {
-			ScriptPath string   `json:"scriptPath"`
-			Args       []string `json:"args"`
+
+		// Set workdir if skillPath is available
+		if skillPath != "" {
+			os.Setenv("WORKDIR", skillPath)
+			defer os.Unsetenv("WORKDIR")
 		}
-		if err = json.Unmarshal([]byte(cleanedArgs), &params); err != nil {
-			return "", fmt.Errorf("failed to unmarshal run_python_script arguments: %w (cleaned args: %s)", err, cleanedArgs)
-		}
-		toolOutput, err = tool.RunPythonScript(params.ScriptPath, params.Args)
-	case "read_file":
-		var params struct {
-			FilePath string `json:"filePath"`
-		}
-		if err = json.Unmarshal([]byte(cleanedArgs), &params); err != nil {
-			return "", fmt.Errorf("failed to unmarshal read_file arguments: %w (cleaned args: %s)", err, cleanedArgs)
-		}
-		path := params.FilePath
-		if !filepath.IsAbs(path) && skillPath != "" {
-			resolvedPath := filepath.Join(skillPath, path)
-			if _, err := os.Stat(resolvedPath); err == nil {
-				path = resolvedPath
-			}
-		}
-		toolOutput, err = tool.ReadFile(path)
-	case "write_file":
-		var params struct {
-			FilePath string `json:"filePath"`
-			Content  string `json:"content"`
-		}
-		if err = json.Unmarshal([]byte(cleanedArgs), &params); err != nil {
-			return "", fmt.Errorf("failed to unmarshal write_file arguments: %w (cleaned args: %s)", err, cleanedArgs)
-		}
-		err = tool.WriteFile(params.FilePath, params.Content)
-		if err == nil {
-			toolOutput = fmt.Sprintf("Successfully wrote to file: %s", params.FilePath)
-		}
+
+		toolOutput, err = tool.Bash(params.Command)
+
 	case "tavily_search":
 		var params struct {
 			Query string `json:"query"`
@@ -584,7 +559,9 @@ func (a *Agent) executeToolCall(toolCall openai.ToolCall, scriptMap map[string]s
 			return "", fmt.Errorf("failed to unmarshal tavily_search arguments: %w (cleaned args: %s)", err, cleanedArgs)
 		}
 		toolOutput, err = tool.TavilySearch(params.Query)
+
 	default:
+		// Handle custom script tools from scriptMap
 		if scriptPath, ok := scriptMap[toolCall.Function.Name]; ok {
 			var params struct {
 				Args []string `json:"args"`
@@ -594,11 +571,31 @@ func (a *Agent) executeToolCall(toolCall openai.ToolCall, scriptMap map[string]s
 					return "", fmt.Errorf("failed to unmarshal script arguments: %w (cleaned args: %s)", err, cleanedArgs)
 				}
 			}
+
+			// Build command based on script extension
+			var cmd string
 			if strings.HasSuffix(scriptPath, ".py") {
-				toolOutput, err = tool.RunPythonScript(scriptPath, params.Args)
+				cmd = fmt.Sprintf("python3 %s", scriptPath)
+			} else if strings.HasSuffix(scriptPath, ".ts") || strings.HasSuffix(scriptPath, ".js") {
+				cmd = fmt.Sprintf("npx tsx %s", scriptPath)
 			} else {
-				toolOutput, err = tool.RunShellScript(scriptPath, params.Args)
+				cmd = fmt.Sprintf("bash %s", scriptPath)
 			}
+
+			// Add arguments if provided
+			if len(params.Args) > 0 {
+				for _, arg := range params.Args {
+					cmd += fmt.Sprintf(" %s", shellQuote(arg))
+				}
+			}
+
+			// Set workdir if skillPath is available
+			if skillPath != "" {
+				os.Setenv("WORKDIR", skillPath)
+				defer os.Unsetenv("WORKDIR")
+			}
+
+			toolOutput, err = tool.Bash(cmd)
 		} else {
 			return "", fmt.Errorf("unknown tool: %s", toolCall.Function.Name)
 		}
@@ -613,4 +610,13 @@ func (a *Agent) executeToolCall(toolCall openai.ToolCall, scriptMap map[string]s
 		return "", fmt.Errorf("tool execution failed for %s: %w", toolCall.Function.Name, err)
 	}
 	return toolOutput, nil
+}
+
+// shellQuote quotes a string for safe shell execution
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	// Simple quoting - wrap in single quotes and escape existing single quotes
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }

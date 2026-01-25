@@ -29,22 +29,22 @@ type ToolParameter struct {
 
 // ToolDefinition 定义单个工具的配置
 type ToolDefinition struct {
-	Name        string                    `yaml:"name"`
-	Script      string                    `yaml:"script,omitempty"` // 可选，指定脚本路径
-	Description string                    `yaml:"description,omitempty"`
-	Parameters  map[string]ToolParameter  `yaml:"parameters,omitempty"`
+	Name        string                   `yaml:"name"`
+	Script      string                   `yaml:"script,omitempty"` // 可选，指定脚本路径
+	Description string                   `yaml:"description,omitempty"`
+	Parameters  map[string]ToolParameter `yaml:"parameters,omitempty"`
 }
 
 // SkillMeta corresponds to the content of SKILL.md frontmatter
 type SkillMeta struct {
-	Name         string            `yaml:"name"`
-	Description  string            `yaml:"description"`
-	AllowedTools []string          `yaml:"allowed-tools"`
-	Model        string            `yaml:"model,omitempty"`
-	Author       string            `yaml:"author,omitempty"`
-	Version      string            `yaml:"version,omitempty"`
-	License      string            `yaml:"license,omitempty"`
-	Tools        []ToolDefinition  `yaml:"tools,omitempty"` // 工具定义列表
+	Name         string           `yaml:"name"`
+	Description  string           `yaml:"description"`
+	AllowedTools []string         `yaml:"allowed-tools"`
+	Model        string           `yaml:"model,omitempty"`
+	Author       string           `yaml:"author,omitempty"`
+	Version      string           `yaml:"version,omitempty"`
+	License      string           `yaml:"license,omitempty"`
+	Tools        []ToolDefinition `yaml:"tools,omitempty"` // 工具定义列表
 }
 
 // SkillResources lists the relevant resource files in the skill package
@@ -338,20 +338,20 @@ func SkillsToPrompt(skills map[string]SkillPackage) string {
 	// Add available tools instructions
 	builder.WriteString("<available_tools_instructions>\n")
 	builder.WriteString("When working on tasks, you have access to the following tools:\n\n")
-	builder.WriteString("**File Operations:**\n")
-	builder.WriteString("- `write_file(filePath, content)`: Create or overwrite a file with the given content\n")
-	builder.WriteString("- `read_file(filePath)`: Read the contents of a file\n")
-	builder.WriteString("  Use these when you need to create, modify, or read files as part of your task.\n\n")
+	builder.WriteString("**bash(command)**: Universal tool for executing shell commands:\n")
+	builder.WriteString("- File operations: cat, grep, echo, head, tail, find, etc.\n")
+	builder.WriteString("- Script execution: python3, node, npx tsx, bash, etc.\n")
+	builder.WriteString("- Git operations: git status, git log, git diff, etc.\n")
+	builder.WriteString("- Package management: npm, pip, cargo, etc.\n")
+	builder.WriteString("  Use bash for virtually all operations including file I/O and script execution.\n\n")
 
-	builder.WriteString("**Script Execution:**\n")
-	builder.WriteString("- `run_shell_script(scriptPath, args)`: Execute a shell script\n")
-	builder.WriteString("- `run_python_script(scriptPath, args)`: Execute a Python script\n")
-	builder.WriteString("  Use these when the task requires running scripts in the skill's scripts directory.\n\n")
+	builder.WriteString("**tavily_search(query)**: Perform web search using the Tavily API.\n")
+	builder.WriteString("  Use when you need to search the web for current information.\n\n")
 
 	builder.WriteString("**IMPORTANT Guidelines:**\n")
-	builder.WriteString("- When a skill asks you to \"create a file\" or \"write to a file\", you MUST call the `write_file` tool\n")
-	builder.WriteString("- When a skill asks you to \"read a file\", you MUST call the `read_file` tool\n")
-	builder.WriteString("- Do NOT just output file contents - actually call the tools to create/read files\n")
+	builder.WriteString("- When a skill asks you to \"create a file\", use: bash echo 'content' > file.txt\n")
+	builder.WriteString("- When a skill asks you to \"read a file\", use: bash cat file.txt\n")
+	builder.WriteString("- When a skill asks you to \"search in files\", use: bash grep 'pattern' file\n")
 	builder.WriteString("- Only execute scripts that are part of the skill's scripts directory\n")
 	builder.WriteString("</available_tools_instructions>\n\n")
 

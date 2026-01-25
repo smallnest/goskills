@@ -488,8 +488,8 @@ func TestSelectAndPrepareSkill_NoSkills(t *testing.T) {
 	assert.Contains(t, err.Error(), "no valid skills found")
 }
 
-// TestExecuteToolCall_ReadFile tests executeToolCall for reading files
-func TestExecuteToolCall_ReadFile(t *testing.T) {
+// TestExecuteToolCall_BashReadFile tests executeToolCall for reading files via bash
+func TestExecuteToolCall_BashReadFile(t *testing.T) {
 	// Create a temporary file
 	tmpFile := filepath.Join(t.TempDir(), "test.txt")
 	testContent := "test file content"
@@ -501,12 +501,13 @@ func TestExecuteToolCall_ReadFile(t *testing.T) {
 		},
 	}
 
-	argsJSON := fmt.Sprintf(`{"filePath": "%s"}`, tmpFile)
+	// Use bash cat command to read file
+	argsJSON := fmt.Sprintf(`{"command": "cat %s"}`, tmpFile)
 	toolCall := openai.ToolCall{
 		ID:   "test-id",
 		Type: openai.ToolTypeFunction,
 		Function: openai.FunctionCall{
-			Name:      "read_file",
+			Name:      "bash",
 			Arguments: argsJSON,
 		},
 	}
@@ -516,8 +517,8 @@ func TestExecuteToolCall_ReadFile(t *testing.T) {
 	assert.Contains(t, output, testContent)
 }
 
-// TestExecuteToolCall_WriteFile tests executeToolCall for writing files
-func TestExecuteToolCall_WriteFile(t *testing.T) {
+// TestExecuteToolCall_BashWriteFile tests executeToolCall for writing files via bash
+func TestExecuteToolCall_BashWriteFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "output.txt")
 
@@ -528,19 +529,19 @@ func TestExecuteToolCall_WriteFile(t *testing.T) {
 	}
 
 	testContent := "written content"
-	argsJSON := fmt.Sprintf(`{"filePath": "%s", "content": "%s"}`, tmpFile, testContent)
+	// Use bash printf to write file (no trailing newline)
+	argsJSON := fmt.Sprintf(`{"command": "printf '%%s' '%s' > %s"}`, testContent, tmpFile)
 	toolCall := openai.ToolCall{
 		ID:   "test-id",
 		Type: openai.ToolTypeFunction,
 		Function: openai.FunctionCall{
-			Name:      "write_file",
+			Name:      "bash",
 			Arguments: argsJSON,
 		},
 	}
 
-	output, err := agent.executeToolCall(toolCall, nil, "")
+	_, err := agent.executeToolCall(toolCall, nil, "")
 	assert.NoError(t, err)
-	assert.Contains(t, output, "Successfully wrote to file")
 
 	// Verify file was created
 	content, err := os.ReadFile(tmpFile)
@@ -583,7 +584,7 @@ func TestExecuteToolCall_InvalidJSON(t *testing.T) {
 		ID:   "test-id",
 		Type: openai.ToolTypeFunction,
 		Function: openai.FunctionCall{
-			Name:      "read_file",
+			Name:      "bash",
 			Arguments: "invalid json",
 		},
 	}
@@ -679,20 +680,19 @@ func TestExecuteToolCall_WithCodeFence(t *testing.T) {
 
 	testContent := "test content"
 	// Simulate LLM returning JSON with code fence
-	argsJSON := fmt.Sprintf("```json\n{\"filePath\": \"%s\", \"content\": \"%s\"}\n```", tmpFile, testContent)
+	argsJSON := fmt.Sprintf("```json\n{\"command\": \"printf '%%s' '%s' > %s\"}\n```", testContent, tmpFile)
 
 	toolCall := openai.ToolCall{
 		ID:   "test-id",
 		Type: openai.ToolTypeFunction,
 		Function: openai.FunctionCall{
-			Name:      "write_file",
+			Name:      "bash",
 			Arguments: argsJSON,
 		},
 	}
 
-	output, err := agent.executeToolCall(toolCall, nil, "")
+	_, err := agent.executeToolCall(toolCall, nil, "")
 	assert.NoError(t, err)
-	assert.Contains(t, output, "Successfully wrote to file")
 
 	// Verify file was created
 	content, err := os.ReadFile(tmpFile)
@@ -713,20 +713,19 @@ func TestExecuteToolCall_WithOverEscapedQuotes(t *testing.T) {
 
 	testContent := "test content"
 	// Simulate LLM returning over-escaped JSON
-	argsJSON := fmt.Sprintf(`{\"filePath\": \"%s\", \"content\": \"%s\"}`, tmpFile, testContent)
+	argsJSON := fmt.Sprintf(`{\"command\": \"printf '%%s' '%s' > %s\"}`, testContent, tmpFile)
 
 	toolCall := openai.ToolCall{
 		ID:   "test-id",
 		Type: openai.ToolTypeFunction,
 		Function: openai.FunctionCall{
-			Name:      "write_file",
+			Name:      "bash",
 			Arguments: argsJSON,
 		},
 	}
 
-	output, err := agent.executeToolCall(toolCall, nil, "")
+	_, err := agent.executeToolCall(toolCall, nil, "")
 	assert.NoError(t, err)
-	assert.Contains(t, output, "Successfully wrote to file")
 
 	// Verify file was created
 	content, err := os.ReadFile(tmpFile)
@@ -775,12 +774,12 @@ func TestExecuteSkillWithTools(t *testing.T) {
 
 // TestContinueSkillWithTools_WithToolCalls tests continueSkillWithTools with tool execution
 func TestContinueSkillWithTools_WithToolCalls(t *testing.T) {
-	// Create a temp file for the read_file tool
+	// Create a temp file for the bash cat command
 	tmpFile := filepath.Join(t.TempDir(), "test.txt")
 	require.NoError(t, os.WriteFile(tmpFile, []byte("test content"), 0644))
 
 	// First response with tool call
-	argsJSON, _ := json.Marshal(map[string]string{"filePath": tmpFile})
+	argsJSON, _ := json.Marshal(map[string]string{"command": "cat " + tmpFile})
 	mockResponse1 := openai.ChatCompletionResponse{
 		Choices: []openai.ChatCompletionChoice{
 			{
@@ -792,7 +791,7 @@ func TestContinueSkillWithTools_WithToolCalls(t *testing.T) {
 							ID:   "call-1",
 							Type: openai.ToolTypeFunction,
 							Function: openai.FunctionCall{
-								Name:      "read_file",
+								Name:      "bash",
 								Arguments: string(argsJSON),
 							},
 						},
@@ -892,8 +891,8 @@ func TestExecuteToolCall_CustomScript(t *testing.T) {
 	assert.Contains(t, output, "custom script output")
 }
 
-// TestExecuteToolCall_RunShellScript tests shell script execution
-func TestExecuteToolCall_RunShellScript(t *testing.T) {
+// TestExecuteToolCall_BashShellScript tests shell script execution via bash
+func TestExecuteToolCall_BashShellScript(t *testing.T) {
 	// Create a temporary script
 	tmpDir := t.TempDir()
 	scriptPath := filepath.Join(tmpDir, "test.sh")
@@ -906,12 +905,13 @@ func TestExecuteToolCall_RunShellScript(t *testing.T) {
 		},
 	}
 
-	argsJSON := fmt.Sprintf(`{"scriptPath": "%s", "args": []}`, scriptPath)
+	// Use bash to execute the script
+	argsJSON := fmt.Sprintf(`{"command": "bash %s"}`, scriptPath)
 	toolCall := openai.ToolCall{
 		ID:   "test-id",
 		Type: openai.ToolTypeFunction,
 		Function: openai.FunctionCall{
-			Name:      "run_shell_script",
+			Name:      "bash",
 			Arguments: argsJSON,
 		},
 	}
@@ -921,8 +921,8 @@ func TestExecuteToolCall_RunShellScript(t *testing.T) {
 	assert.Contains(t, output, "shell script output")
 }
 
-// TestExecuteToolCall_RunPythonScript tests Python script execution
-func TestExecuteToolCall_RunPythonScript(t *testing.T) {
+// TestExecuteToolCall_BashPythonScript tests Python script execution via bash
+func TestExecuteToolCall_BashPythonScript(t *testing.T) {
 	// Create a temporary Python script
 	tmpDir := t.TempDir()
 	scriptPath := filepath.Join(tmpDir, "test.py")
@@ -935,12 +935,13 @@ func TestExecuteToolCall_RunPythonScript(t *testing.T) {
 		},
 	}
 
-	argsJSON := fmt.Sprintf(`{"scriptPath": "%s", "args": []}`, scriptPath)
+	// Use bash to execute the Python script
+	argsJSON := fmt.Sprintf(`{"command": "python3 %s"}`, scriptPath)
 	toolCall := openai.ToolCall{
 		ID:   "test-id",
 		Type: openai.ToolTypeFunction,
 		Function: openai.FunctionCall{
-			Name:      "run_python_script",
+			Name:      "bash",
 			Arguments: argsJSON,
 		},
 	}
@@ -950,8 +951,8 @@ func TestExecuteToolCall_RunPythonScript(t *testing.T) {
 	assert.Contains(t, output, "python script output")
 }
 
-// TestExecuteToolCall_ReadFileRelativePath tests reading file with relative path
-func TestExecuteToolCall_ReadFileRelativePath(t *testing.T) {
+// TestExecuteToolCall_BashReadFileRelativePath tests reading file with relative path via bash
+func TestExecuteToolCall_BashReadFileRelativePath(t *testing.T) {
 	// Create a temporary directory structure
 	tmpDir := t.TempDir()
 	skillPath := filepath.Join(tmpDir, "skill")
@@ -968,13 +969,13 @@ func TestExecuteToolCall_ReadFileRelativePath(t *testing.T) {
 		},
 	}
 
-	// Use relative path
-	argsJSON := fmt.Sprintf(`{"filePath": "%s"}`, testFile)
+	// Use bash cat with relative path
+	argsJSON := fmt.Sprintf(`{"command": "cat %s"}`, testFile)
 	toolCall := openai.ToolCall{
 		ID:   "test-id",
 		Type: openai.ToolTypeFunction,
 		Function: openai.FunctionCall{
-			Name:      "read_file",
+			Name:      "bash",
 			Arguments: argsJSON,
 		},
 	}

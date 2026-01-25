@@ -12,7 +12,7 @@ func TestGenerateToolDefinitions_AllowedTools(t *testing.T) {
 	skill := SkillPackage{
 		Path: "/test/skill",
 		Meta: SkillMeta{
-			AllowedTools: []string{"read_file", "write_file"}, // Only allow these tools
+			AllowedTools: []string{"bash"}, // Only allow bash tool
 		},
 		Resources: SkillResources{
 			Scripts: []string{"test.py", "setup.sh"},
@@ -21,8 +21,8 @@ func TestGenerateToolDefinitions_AllowedTools(t *testing.T) {
 
 	tools, scriptMap := GenerateToolDefinitions(&skill)
 
-	// Should have 2 allowed base tools + 2 script tools
-	assert.Len(t, tools, 4)
+	// Should have 1 allowed base tool + 2 script tools
+	assert.Len(t, tools, 3)
 	assert.Len(t, scriptMap, 2)
 
 	// Check that only allowed tools are included
@@ -30,8 +30,7 @@ func TestGenerateToolDefinitions_AllowedTools(t *testing.T) {
 	for _, tool := range tools {
 		toolNames[tool.Function.Name] = true
 	}
-	assert.True(t, toolNames["read_file"])
-	assert.True(t, toolNames["write_file"])
+	assert.True(t, toolNames["bash"])
 	assert.True(t, toolNames["run_test_py"])
 	assert.True(t, toolNames["run_setup_sh"])
 }
@@ -41,7 +40,7 @@ func TestGenerateToolDefinitions_NoAllowedTools(t *testing.T) {
 	skill := SkillPackage{
 		Path: "/test/skill",
 		Meta: SkillMeta{
-			AllowedTools: []string{}, // Empty allowed tools
+			AllowedTools: []string{}, // Empty allowed tools means all tools
 		},
 		Resources: SkillResources{
 			Scripts: []string{"deploy.sh"},
@@ -50,21 +49,21 @@ func TestGenerateToolDefinitions_NoAllowedTools(t *testing.T) {
 
 	tools, scriptMap := GenerateToolDefinitions(&skill)
 
-	// Should have all base tools + 1 script tool
-	assert.Greater(t, len(tools), 1) // At least one script tool
-	assert.Len(t, scriptMap, 1)      // One script tool
+	// Should have all base tools (bash, tavily_search) + 1 script tool
+	assert.GreaterOrEqual(t, len(tools), 3) // At least 2 base tools + 1 script
+	assert.Len(t, scriptMap, 1)             // One script tool
 
 	// Check script map contains correct path
 	assert.Contains(t, scriptMap, "run_deploy_sh")
 	assert.Equal(t, "/test/skill/deploy.sh", scriptMap["run_deploy_sh"])
 }
 
-// TestGenerateToolDefinitions_NoScripts tests tool generation with no scripts
-func TestGenerateToolDefinitions_NoScripts(t *testing.T) {
+// TestGenerateToolDefinitions_AllBaseTools tests that all base tools are included when no filter
+func TestGenerateToolDefinitions_AllBaseTools(t *testing.T) {
 	skill := SkillPackage{
 		Path: "/test/skill",
 		Meta: SkillMeta{
-			AllowedTools: []string{"read_file"},
+			AllowedTools: []string{}, // No filter - all tools
 		},
 		Resources: SkillResources{
 			Scripts: []string{}, // No scripts
@@ -73,12 +72,40 @@ func TestGenerateToolDefinitions_NoScripts(t *testing.T) {
 
 	tools, scriptMap := GenerateToolDefinitions(&skill)
 
-	// Should have only the allowed base tool
-	assert.Len(t, tools, 1)
+	// Should have exactly 2 base tools (bash, tavily_search)
+	assert.Len(t, tools, 2)
 	assert.Len(t, scriptMap, 0) // No script tools
 
-	// Check it's the correct tool
-	assert.Equal(t, "read_file", tools[0].Function.Name)
+	// Check base tool names
+	toolNames := make(map[string]bool)
+	for _, tool := range tools {
+		toolNames[tool.Function.Name] = true
+	}
+	assert.True(t, toolNames["bash"])
+	assert.True(t, toolNames["tavily_search"])
+}
+
+// TestGenerateToolDefinitions_OnlyBash tests filtering to only bash
+func TestGenerateToolDefinitions_OnlyBash(t *testing.T) {
+	skill := SkillPackage{
+		Path: "/test/skill",
+		Meta: SkillMeta{
+			AllowedTools: []string{"bash"},
+		},
+		Resources: SkillResources{
+			Scripts: []string{}, // No scripts
+		},
+	}
+
+	tools, scriptMap := GenerateToolDefinitions(&skill)
+
+	// Should have only bash tool
+	assert.Len(t, tools, 1)
+	assert.Len(t, scriptMap, 0)
+
+	// Check it's the bash tool
+	assert.Equal(t, "bash", tools[0].Function.Name)
+	assert.Contains(t, tools[0].Function.Description, "shell command")
 }
 
 // TestGenerateScriptTool_PythonScript tests Python script tool generation
@@ -117,6 +144,27 @@ func TestGenerateScriptTool_ShellScript(t *testing.T) {
 	assert.Equal(t, toolName, tool.Function.Name)
 	assert.Contains(t, tool.Function.Description, "shell script")
 	assert.Contains(t, tool.Function.Description, "deploy.sh")
+
+	// Verify tool structure
+	assert.NotNil(t, tool.Function)
+	assert.NotNil(t, tool.Function.Parameters)
+}
+
+// TestGenerateScriptTool_TypeScriptScript tests TypeScript script tool generation
+func TestGenerateScriptTool_TypeScriptScript(t *testing.T) {
+	skillPath := "/test/skill"
+	scriptRelPath := "build.ts"
+
+	tool, toolName := generateScriptTool(skillPath, scriptRelPath)
+
+	// Check tool name generation
+	assert.Equal(t, "run_build_ts", toolName)
+
+	// Check tool definition
+	assert.Equal(t, openai.ToolTypeFunction, tool.Type)
+	assert.Equal(t, toolName, tool.Function.Name)
+	assert.Contains(t, tool.Function.Description, "shell script")
+	assert.Contains(t, tool.Function.Description, "build.ts")
 
 	// Verify tool structure
 	assert.NotNil(t, tool.Function)
@@ -168,7 +216,7 @@ func TestGenerateToolDefinitions_EmptySkill(t *testing.T) {
 
 	tools, scriptMap := GenerateToolDefinitions(&skill)
 
-	// Should have all base tools
+	// Should have all base tools (bash, tavily_search)
 	assert.Greater(t, len(tools), 0)
 	assert.Len(t, scriptMap, 0)
 
